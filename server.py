@@ -35,18 +35,24 @@ class Server:
             print("->", end='')
             self.accepted.append(accept)
 
+    def send(self, conn, data): # the way this works could pose issues like getting stuck with infinite loops
+        conn.send(data)
+        response = conn.recv(1024)
+        while response[-2:] != b"->":
+            response += conn.recv(1024)
+        return response
+
     def update_clients(self):
         clients = "Current connections\n"
         for i, accept in enumerate(self.accepted):
             try:
-                accept[0].send(' '.encode())
-                accept[0].recv(1)
+                self.send(accept[0], b' ')
             except:
                 del self.accepted[i]
             clients += str(i) + ": " + str(accept[1][0]) + ":" + str(accept[1][1]) + '\n'
         return clients
 
-    def receive_files(self, files):
+    def save_files(self, files):
         files = files.split(b'FILE_END')[:-1]
         for file in files:
             file = file.split(b'NAME')
@@ -80,7 +86,7 @@ class Server:
         for conn, address in self.accepted:
             conn.send(b"exit")
 
-    def send_commands(self, conn):
+    def communicate(self, conn):
         try:
             print("Type a command")
             print("->", end='')
@@ -94,17 +100,13 @@ class Server:
                     command_args = shlex.split(command)
                     if command_args[0] == "send":
                         files = command_args[1:]
-                        conn.send(self.parse_files(files))
-                        response = conn.recv(1024).decode("utf-8")
+                        response = self.send(conn, self.parse_files(files)).decode("utf-8")
                         print(response, end='')
                     else:
-                        conn.send(command.encode())
-                        response = conn.recv(1024)  # .decode("utf-8")
-                        while response[-2:] != b"->":
-                            response += conn.recv(1024)
+                        response = self.send(conn, command.encode())
                         try:
                             if response[:len(b"FILES")] == b"FILES":
-                                self.receive_files(response[len(b"FILES"):-1 * len(b'->')])
+                                self.save_files(response[len(b"FILES"): -1*len(b'->')])
                                 print("->", end='')
                             else:
                                 print(response.decode("utf-8"), end='')
@@ -147,7 +149,7 @@ class Server:
             else:
                 try:
                     conn = self.accepted[int(connect)][0]
-                    self.send_commands(conn)
+                    self.communicate(conn)
                 except:
                     print("Failed to connect to client!")
 
@@ -180,4 +182,5 @@ def main(argv):
     queue.join()
 
 
-main(sys.argv[1:])
+if __name__ == "__main__":
+    main(sys.argv[1:])
