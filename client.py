@@ -88,7 +88,13 @@ class Client:
         )
         cmd.wait()
         stdout, stderr = cmd.communicate()
-        return stdout + stderr + (str(os.getcwd()) + "->").encode()
+        output = b''
+        if stdout:
+            output += stdout
+        if stderr:
+            output += stderr
+        output += (str(os.getcwd()) + "->").encode()
+        return output
 
     def __shell(self):
         while True:
