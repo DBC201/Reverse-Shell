@@ -20,8 +20,8 @@ class Client:
                     self.__shell()
                     self.sock = socket.socket()
         else:
-            self.__connect()
-            self.__shell()
+            if self.__connect():
+                self.__shell()
 
     def __connect(self):
         try:
