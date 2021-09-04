@@ -5,14 +5,13 @@ import os
 import shlex
 import sys, argparse
 
-queue = Queue()
-
-jobs = ["listen", "ui"]  # jobs here
+THREADS = Queue()
 
 
 def kill_threads():  # kills the jobs in order to quit
-    for job in jobs:
-        queue.task_done()
+    while not THREADS.empty():
+        THREADS.get()
+        THREADS.task_done()
 
 
 class Server:
@@ -168,18 +167,16 @@ def main(argv):
         port = args.port
     server = Server(port)
 
-    def assign_threads():  # assigning works to threads
-        job = queue.get()
-        if job == "listen":
-            server.listen()
-        elif job == "ui":
-            server.ui()
+    listening_thread = threading.Thread(target=server.listen, daemon=True)
+    ui_thread = threading.Thread(target=server.ui, daemon=True)
 
-    for job in jobs:  # creating threads
-        queue.put(job)
-        t = threading.Thread(target=assign_threads, daemon=True)
-        t.start()
-    queue.join()
+    THREADS.put(listening_thread)
+    THREADS.put(ui_thread)
+
+    listening_thread.start()
+    ui_thread.start()
+
+    THREADS.join()
 
 
 if __name__ == "__main__":
