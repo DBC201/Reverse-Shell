@@ -163,9 +163,14 @@ class Server:
                     print("Failed to connect to client!")
 
 
-if __name__ == "__main__":
+def return_parser():
     parser = argparse.ArgumentParser(description="Reverse shell server made by dbc201")
     parser.add_argument("-p", "--port", type=int, dest="port", help="Port the server will connect to")
+    return parser
+
+
+if __name__ == "__main__":
+    parser = return_parser()
     args = parser.parse_args(sys.argv[1:])
     port = 41369
     if args.port:

@@ -158,9 +158,9 @@ def return_parser():
     return parser
 
 
-def main(argv):
+if __name__ == '__main__':
     parser = return_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(sys.argv[1:])
     verbose = False
     loop = False
     if args.verbose:
@@ -168,7 +168,3 @@ def main(argv):
     if args.loop:
         loop = True
     Client(args.ip, args.port, verbose, loop).run()
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
