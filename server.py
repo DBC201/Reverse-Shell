@@ -20,8 +20,8 @@ class Server:
             raise e
 
     def run(self):
-        listening_thread = threading.Thread(target=self.listen, daemon=True)
-        ui_thread = threading.Thread(target=self.ui, daemon=True)
+        listening_thread = threading.Thread(target=self.__listen, daemon=True)
+        ui_thread = threading.Thread(target=self.__ui, daemon=True)
 
         self.threads.put(listening_thread)
         self.threads.put(ui_thread)
@@ -36,7 +36,7 @@ class Server:
             self.threads.get()
             self.threads.task_done()
 
-    def listen(self):
+    def __listen(self):
         while True:
             accept = self.sock.accept()  # a list of tuples (conn, address)
             print()
@@ -131,7 +131,7 @@ class Server:
             print("Failed to send command!")
             self.update_clients()
 
-    def ui(self):
+    def __ui(self):
         print("Reverse shell by dbc201")
         print("Type help for further info")
         while True:
