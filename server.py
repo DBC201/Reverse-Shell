@@ -15,6 +15,7 @@ class Server:
             self.sock.listen(5)  # will end connection after 5 bad attempts
             self.accepted = []
             self.threads = Queue()
+            self.lock = threading.Lock()
             print("Listening to port:", self.port)
         except Exception as e:
             raise e
@@ -42,7 +43,9 @@ class Server:
             print()
             print("Received connection from: " + str(accept[1][0]) + ":" + str(accept[1][1]))
             print("->", end='')
+            self.lock.acquire()
             self.accepted.append(accept)
+            self.lock.release()
 
     def send(self, conn, data): # the way this works could pose issues like getting stuck with infinite loops
         conn.send(data)
@@ -57,7 +60,9 @@ class Server:
             try:
                 self.send(accept[0], b' ')
             except:
+                self.lock.acquire()
                 del self.accepted[i]
+                self.lock.release()
             clients += str(i) + ": " + str(accept[1][0]) + ":" + str(accept[1][1]) + '\n'
         return clients
 
@@ -104,6 +109,7 @@ class Server:
                 if command.lower() == "exit":
                     conn.send("exit".encode())
                     conn.close()
+                    self.update_clients()
                     return
                 if len(command) > 0:
                     command_args = shlex.split(command)
