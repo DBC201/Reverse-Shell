@@ -7,7 +7,7 @@ import sys, argparse
 
 
 class Server:
-    def __init__(self, port):
+    def __init__(self, port, bufsz=8138):
         try:
             self.port = port
             self.sock = socket.socket()
@@ -16,6 +16,7 @@ class Server:
             self.accepted = []
             self.threads = Queue()
             self.lock = threading.Lock()
+            self.bufsz = bufsz
             print("Listening to port:", self.port)
         except Exception as e:
             raise e
@@ -49,9 +50,9 @@ class Server:
 
     def send(self, conn, data): # the way this works could pose issues like getting stuck with infinite loops
         conn.send(data)
-        response = conn.recv(1024)
+        response = conn.recv(self.bufsz)
         while response[-2:] != b"->":
-            response += conn.recv(1024)
+            response += conn.recv(self.bufsz)
         return response
 
     def update_clients(self):

