@@ -1,27 +1,25 @@
 import socket
 import threading
 from queue import Queue
-import os
 import shlex
 import sys, argparse
+from Socket import Socket
+import os
 
 
-class Server:
-    def __init__(self, port, bufsz=8138):
-        try:
-            self.port = port
-            self.sock = socket.socket()
-            self.sock.bind(('', self.port))
-            self.sock.listen(5)  # will end connection after 5 bad attempts
-            self.accepted = []
-            self.threads = Queue()
-            self.lock = threading.Lock()
-            self.bufsz = bufsz
-            print("Listening to port:", self.port)
-        except Exception as e:
-            raise e
+class Server(Socket):
+    def __init__(self, port):
+        super().__init__('', port, 4096)
+        self.accepted = []
+        self.threads = Queue()
+        self.lock = threading.Lock()
+        self.receiving_file = None
 
     def run(self):
+        self.sock = socket.socket()
+        self.sock.bind(('', self.port))
+        self.sock.listen(5)  # will end connection after 5 bad attempts
+        print("Listening to port:", self.port)
         listening_thread = threading.Thread(target=self.__listen, daemon=True)
         ui_thread = threading.Thread(target=self.__ui, daemon=True)
 
@@ -48,91 +46,54 @@ class Server:
             self.accepted.append(accept)
             self.lock.release()
 
-    def send(self, conn, data): # the way this works could pose issues like getting stuck with infinite loops
-        conn.send(data)
-        response = conn.recv(self.bufsz)
-        while response[-2:] != b"->":
-            response += conn.recv(self.bufsz)
-        return response
-
     def update_clients(self):
         clients = "Current connections\n"
+        accepted = []
         for i, accept in enumerate(self.accepted):
             try:
-                self.send(accept[0], b' ')
+                accept[0].sendall(b' ')
+                accepted.append(accept)
             except:
-                self.lock.acquire()
-                del self.accepted[i]
-                self.lock.release()
+                continue
             clients += str(i) + ": " + str(accept[1][0]) + ":" + str(accept[1][1]) + '\n'
+        self.lock.acquire()
+        self.accepted = accepted
+        self.lock.release()
         return clients
 
-    def save_files(self, files):
-        files = files.split(b'FILE_END')[:-1]
-        for file in files:
-            file = file.split(b'NAME')
-            try:
-                with open("received_files/" + file[0].decode("utf-8"), "wb") as f:
-                    f.write(file[1])
-            except FileNotFoundError:
-                os.mkdir("received_files")
-                with open("received_files/" + file[0].decode("utf-8"), "wb") as f:
-                    f.write(file[1])
-            except Exception as e:
-                print(e)
-                print("Error receiving", file)
+    def pipe(self, conn, request_handler, response_handler):
+        self.source(conn, request_handler)
+        self.sink(conn, response_handler)
 
-    def parse_files(self, files):
-        parsed = b"FILES"
-        for file in files:
-            try:
-                with open("send/"+file, "rb") as f:
-                    parsed += file.encode() + b"NAME" + f.read() + b"FILE_END"
-            except FileNotFoundError:
-                print("File", file, "doesn't exist!")
-            except Exception as e:
-                print(e)
-                print("Unable to send", file)
-        parsed += b"CONN_END"
-        return parsed
-
-    def send_kill_signal(self):
-        self.update_clients()
-        for conn, address in self.accepted:
-            conn.send(b"exit")
+    def handle_file(self, data):
+        flag = ("SENDING_FILE:" + self.receiving_file).encode()
+        if data[:len(flag)] == flag:
+            return
+        if not os.path.exists("received_files"):
+            os.mkdir("received_files")
+        with open(os.path.join(os.getcwd(), "received_files", self.receiving_file), "ab") as file:
+            file.write(data)
 
     def communicate(self, conn):
         try:
             print("Type a command")
-            print("->", end='')
             while True:
-                command = input().strip()
+                command = input("->").strip()
                 if command.lower() == "exit":
-                    conn.send("exit".encode())
-                    conn.close()
-                    self.update_clients()
                     return
                 if len(command) > 0:
                     command_args = shlex.split(command)
                     if command_args[0] == "send":
-                        files = command_args[1:]
-                        response = self.send(conn, self.parse_files(files)).decode("utf-8")
-                        print(response, end='')
+                        self.pipe(conn, self.yield_file(os.path.join(os.getcwd(), "send", command_args[1])),
+                                  lambda response: print(response.decode("utf-8"), end=''))
+                    elif command_args[0] == "receive":
+                        self.receiving_file = command_args[1]
+                        self.pipe(conn, self.yield_data(command),
+                                  self.handle_file)
+                        self.receiving_file = None
                     else:
-                        response = self.send(conn, command.encode())
-                        try:
-                            if response[:len(b"FILES")] == b"FILES":
-                                self.save_files(response[len(b"FILES"): -1*len(b'->')])
-                                print("->", end='')
-                            else:
-                                print(response.decode("utf-8"), end='')
-                        except UnicodeDecodeError:
-                            lines = response.split(b'\n')
-                            for line in lines:
-                                if line == lines[-1]:
-                                    print(line, end='')
-                                else:
-                                    print(line)
+                        self.pipe(conn, self.yield_data(command),
+                                  lambda response: print(response.decode("utf-8"), end=''))
         except Exception as e:
             print(e)
             print("Failed to send command!")
@@ -144,7 +105,6 @@ class Server:
         while True:
             connect = input("->").strip()
             if connect.lower() == "exit":
-                self.send_kill_signal()
                 self.kill_threads()
                 self.sock.close()
                 return

