@@ -76,7 +76,7 @@ class Client(Socket):
         if self.receiving_file is not None:
             with open(os.path.join(os.getcwd(), self.receiving_file), 'ab') as f:
                 f.write(data)
-        if data[:len(b"SENDING_FILE:")] == b"SENDING_FILE:":
+        elif data[:len(b"SENDING_FILE:")] == b"SENDING_FILE:":
             self.receiving_file = data[len(b"SENDING_FILE:"):].decode("utf-8")
         else:
             self.command_buffer += data.decode("utf-8")

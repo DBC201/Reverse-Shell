@@ -41,7 +41,7 @@ class Socket:
         flag = ("SENDING_FILE:" + os.path.basename(filepath)).encode()
         if file_size > 999999999999 - len(flag):
             raise RuntimeError(f"Maximum file size is 999999999999 bytes, {filepath} is {file_size} bytes")
-        file_size = str(file_size).zfill(12)
+        file_size = str(file_size+len(flag)).zfill(12)
         yield file_size.encode("utf-8")
 
         yield flag
