@@ -1,5 +1,5 @@
 # Reverse Shell
-[This is a reverse shell script written in python.](https://github.com/DBC201/Reverse-Shell)
+This is a reverse shell script written in python.
 
 ## DISCLAIMER
 **This comes with neither warranty nor working guarantee whatsoever. If you do, use at your own risk.

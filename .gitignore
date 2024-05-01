@@ -1,5 +1,4 @@
 .idea
 received_files
 send
-private
-venv
+__pycache__
